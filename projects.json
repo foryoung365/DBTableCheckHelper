@@ -1,0 +1,7 @@
+{
+    "projects" : [
+        {"project": "ND", "name": "手机魔域"},
+        {"project": "XSJ", "name": "西山居版手机魔域"},
+        {"project": "OVERSEA", "name": "手机魔域海外版"}
+    ]
+}
