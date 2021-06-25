@@ -1,16 +1,17 @@
 # -*- coding: utf-8 -*-
 
-from enum import Enum
+from enum import IntEnum
 import json
 
 import pymysql
 from Debughelp import DEBUG_INFO
 
-class ConstraintType(Enum):
+class ConstraintType(IntEnum):
+    CONSTRAINT_NONE                 = 0
     CONSTRAINT_VALUE_RANGE          = 1
     CONSTRAINT_TABLE_REFERENCE      = 2
 
-class ConstraintError(Enum):
+class ConstraintError(IntEnum):
     CONSTRAINT_ERROR_OK                         = 0 #成功
     CONSTRAINT_ERROR_ALREADY_EXISTS             = 1 #已存在
     CONSTRAINT_ERROR_OUT_OF_RANGE               = 2 #超出范围
@@ -18,6 +19,9 @@ class ConstraintError(Enum):
     CONSTRAINT_ERROR_REF_NOT_EXISTS             = 4 #关联对象不存在
 
 class Constraint:
+    def __init__(self) -> None:
+        self.type = ConstraintType.CONSTRAINT_NONE
+
     def verify(self, field)->ConstraintError:
         pass
     
@@ -39,19 +43,24 @@ class Constraint:
     def getContentString(self)->str:
         pass
 
+    def toJson(self)->dict:
+        pass
+
 '''
 "constraints":[
     {"type": 1, "content": [{"min":minV, "max": maxV}, {"min":minV, "max": maxV}, ..., {"min":minV, "max": maxV}]},
+    {"type": 2, "content": [{"table":"cq_xxx", "field": "field_name"}]}
     ...
 ]
 '''
 class ConstraintValueRange(Constraint):
-    def __init__(self, ranges : str = None ) -> None:
+    def __init__(self, jsonR : dict = None ) -> None:
         super().__init__()
-        if ranges is None:
+        if jsonR is None:
+            self.type = ConstraintType.CONSTRAINT_VALUE_RANGE
             self.ranges = []
         else:
-            self.addRangeFromJson(ranges)
+            self.initFromJson(jsonR)
 
     def addRange(self, minV, maxV)->ConstraintError:
         for range in self.ranges:
@@ -61,9 +70,10 @@ class ConstraintValueRange(Constraint):
         self.ranges.append(pair)
         return ConstraintError.CONSTRAINT_ERROR_OK
     
-    def addRangeFromJson(self, jsonR:str)->ConstraintError:
+    def initFromJson(self, jsonR:dict)->ConstraintError:
         DEBUG_INFO(jsonR)
-        self.ranges += json.loads(jsonR)
+        self.type = ConstraintType(jsonR["type"])
+        self.ranges += jsonR["content"]
 
         return ConstraintError.CONSTRAINT_ERROR_OK
 
@@ -92,14 +102,21 @@ class ConstraintValueRange(Constraint):
             text += template.format(min=range["min"], max=range["max"])
         return text
 
+    def toJson(self)->dict:
+
+        res = { "type":int(self.type), "content":self.ranges }
+
+        return res
+
 class ConstraintTableReference(Constraint):
-    def __init__(self, dbCursor: pymysql.cursors.Cursor, refs : str = None) -> None:
+    def __init__(self, dbCursor: pymysql.cursors.Cursor, refs : dict = None) -> None:
         self.cursor = dbCursor
         DEBUG_INFO(refs)
         if refs is None:
+            self.type = ConstraintType.CONSTRAINT_TABLE_REFERENCE
             self.refs = []
         else:
-            self.addRefFromJson(refs)
+            self.initFromJson(refs)
 
     def addRef(self, tbl : str, field : str)->ConstraintError:
         for ref in self.refs:
@@ -110,9 +127,10 @@ class ConstraintTableReference(Constraint):
 
         return ConstraintError.CONSTRAINT_ERROR_OK
 
-    def addRefFromJson(self, jsonR:str)->ConstraintError:
+    def initFromJson(self, jsonR:dict)->ConstraintError:
         DEBUG_INFO(jsonR)
-        self.refs += json.loads(jsonR)
+        self.type = ConstraintType(jsonR["type"])
+        self.refs += jsonR["content"]
         return ConstraintError.CONSTRAINT_ERROR_OK
 
     def makeSQL(self, fieldV)->list:
@@ -147,6 +165,11 @@ class ConstraintTableReference(Constraint):
 
         return ConstraintError.CONSTRAINT_ERROR_OK
 
+    def toJson(self)->dict:
+        res = { "type":int(self.type), "content":self.refs }
+
+        return res
+
 
 if __name__ == '__main__':
     conn = pymysql.connect("172.24.140.83", "wjq", "wjq")
@@ -169,6 +192,9 @@ if __name__ == '__main__':
 
     print(ctr.getDescString(), ctr.getContentString())
     print(cvr.getDescString(), cvr.getContentString())
+
+    print(ctr.toJson())
+    print(cvr.toJson())
     
 
 
