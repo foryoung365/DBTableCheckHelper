@@ -24,22 +24,23 @@ class DbError(IntEnum):
 """
 
 class DbMgr:
-    def __init__(self, cfgs:str = None) -> None:
+    def __init__(self, cfgfile:str = None) -> None:
         self.conn = None
         self.cfgs = []
         self.selectedHost = None
         self.selectedDb = None
 
-        if cfgs is not None:
-            self.addConfigFromJson(cfgs)
+        if cfgfile is not None:
+            self.addConfigFromJson(cfgfile)
 
     def __del__(self)->None:
         self.reset()
 
     def addConfigFromJson(self, jsonDb:str)->DbError:
         DEBUG_INFO(jsonDb)
-        res = json.loads(jsonDb)
-        self.cfgs += res["databases"]
+        with open(jsonDb, 'r', encoding="utf-8") as cfg:
+            self.cfgs = json.load(cfg)["databases"]
+        DEBUG_INFO(self.cfgs)
 
     def reset(self)->None:
         if self.conn is not None:

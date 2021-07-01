@@ -1,0 +1,5 @@
+{
+    "databases": [
+        {"host":"172.24.140.83", "user":"wjq", "password":"wjq"}
+    ]
+}

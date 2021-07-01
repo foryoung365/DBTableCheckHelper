@@ -1,0 +1,14 @@
+{
+    "tables" : [
+        {"table": "cq_magictype", 
+            "rules":
+            [
+                {"type": 1, "field":"level", "constraints":[
+                    {"type":1, "content":[
+                        {"min":0, "max":99}
+                    ]}
+                ]}
+            ]
+        }
+    ]
+}

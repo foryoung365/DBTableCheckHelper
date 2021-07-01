@@ -22,7 +22,7 @@ class Constraint:
     def __init__(self) -> None:
         self.type = ConstraintType.CONSTRAINT_NONE
 
-    def verify(self, field)->ConstraintError:
+    def verify(self, field, cursor:pymysql.cursors.Cursor)->ConstraintError:
         pass
     
     def getErrorString(self, err: ConstraintError)->str:
@@ -73,11 +73,11 @@ class ConstraintValueRange(Constraint):
     def initFromJson(self, jsonR:dict)->ConstraintError:
         DEBUG_INFO(jsonR)
         self.type = ConstraintType(jsonR["type"])
-        self.ranges += jsonR["content"]
+        self.ranges = jsonR["content"]
 
         return ConstraintError.CONSTRAINT_ERROR_OK
 
-    def verify(self, field) -> ConstraintError:
+    def verify(self, field, cursor:pymysql.cursors.Cursor) -> ConstraintError:
         DEBUG_INFO((self.ranges, field))
 
         bValid = False
@@ -93,7 +93,7 @@ class ConstraintValueRange(Constraint):
         return self.ranges
 
     def getDescString(self) -> str:
-        return "取值必须在以下范围（左右均为闭区间）：\n"
+        return "字段取值必须在以下范围（左右均为闭区间）：\n"
     
     def getContentString(self)->str:
         template = "[{min}, {max}]\n"
@@ -109,8 +109,7 @@ class ConstraintValueRange(Constraint):
         return res
 
 class ConstraintTableReference(Constraint):
-    def __init__(self, dbCursor: pymysql.cursors.Cursor, refs : dict = None) -> None:
-        self.cursor = dbCursor
+    def __init__(self, refs : dict = None) -> None:
         DEBUG_INFO(refs)
         if refs is None:
             self.type = ConstraintType.CONSTRAINT_TABLE_REFERENCE
@@ -153,12 +152,12 @@ class ConstraintTableReference(Constraint):
 
         return text
 
-    def verify(self, field) -> ConstraintError:
+    def verify(self, field, cursor:pymysql.cursors.Cursor) -> ConstraintError:
         sqls = self.makeSQL(field)
         for sql in sqls:
             DEBUG_INFO(sql)
             try:
-                if not self.cursor.execute(sql) > 0:
+                if not cursor.execute(sql) > 0:
                     return ConstraintError.CONSTRAINT_ERROR_REF_NOT_EXISTS
             except:
                 return ConstraintError.CONSTRAINT_ERROR_BAD_SQL
@@ -171,23 +170,30 @@ class ConstraintTableReference(Constraint):
         return res
 
 
+def createNewConstrainst(jsonC:dict):
+    if jsonC["type"] == ConstraintType.CONSTRAINT_VALUE_RANGE:
+        return ConstraintValueRange(jsonC)
+    elif jsonC["type"] == ConstraintType.CONSTRAINT_TABLE_REFERENCE:
+        return ConstraintTableReference(jsonC)
+
+
 if __name__ == '__main__':
     conn = pymysql.connect("172.24.140.83", "wjq", "wjq")
     conn.select_db("xsjmygf_0621wb")
     cursor = conn.cursor()
 
-    ctr = ConstraintTableReference(cursor)
+    ctr = ConstraintTableReference()
     ctr.addRef("cq_magictype", "id")
-    print(ctr.verify(12345))
+    print(ctr.verify(12345, cursor))
 
     cvr = ConstraintValueRange()
     cvr.addRange(1, 5)
     cvr.addRange(2, 4)
     cvr.addRange(10, 20)
-    print(cvr.verify(6))
-    print(cvr.verify(0))
-    print(cvr.verify(3))
-    print(cvr.verify(10))
+    print(cvr.verify(6, cursor))
+    print(cvr.verify(0, cursor))
+    print(cvr.verify(3, cursor))
+    print(cvr.verify(10, cursor))
     print(cvr.addRange(50,50))
 
     print(ctr.getDescString(), ctr.getContentString())
