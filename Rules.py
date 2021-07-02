@@ -29,6 +29,9 @@ class Rule:
     def run(self, row, cursor:pymysql.cursors.Cursor)->list:
         pass
 
+    def getDesc(self)->str:
+        pass
+
 class TableCheckError(IntEnum):
     TABLE_CHECK_OK                  = 0
     TABLE_CHECK_NO_DATA_OR_ERROR    = 1
@@ -53,7 +56,7 @@ class DbTable:
                 self.rules.append(RuleCalc(self, args=r))
 
     def initFields(self, cursor:pymysql.cursors.Cursor):
-        sql = "DESCRIBE {table}".format(self.table)
+        sql = "DESCRIBE {table}".format(table=self.table)
         cursor.execute(sql)
         self.fields = []
 
@@ -67,15 +70,15 @@ class DbTable:
 
     def getErrorStr(self, err:TableCheckError):
         if err == TableCheckError.TABLE_CHECK_OK:
-            return "表【{table}】校验通过。".format(self.table)
+            return "表【{table}】校验通过。\n".format(table=self.table)
         elif err == TableCheckError.TABLE_CHECK_NO_DATA_OR_ERROR:
-            return "表【{table}】不存在或者无数据。".format(self.table)
+            return "表【{table}】不存在或者无数据。\n".format(table=self.table)
         elif err == TableCheckError.TABLE_CHECK_FAILED:
-            return "表【{table}】校验失败。".format(self.table)
+            return "表【{table}】校验失败。\n".format(table=self.table)
 
     def checkTable(self, cursor:pymysql.cursors.Cursor)->str:
         self.initFields(cursor)
-        sql = "SELECT * FROM {table}".format(self.table)
+        sql = "SELECT * FROM {table}".format(table=self.table)
         cursor.execute(sql)
 
         txt = "开始校验表【{t}】：\n".format(t=self.table)
@@ -95,10 +98,10 @@ class DbTable:
 
         if len(result) > 0:
             txt += self.getErrorStr(TableCheckError.TABLE_CHECK_FAILED)
-            return txt
         else:
             txt += self.getErrorStr(TableCheckError.TABLE_CHECK_OK)
-            return txt
+
+        return txt
     
 '''
 "tables":[
@@ -150,6 +153,13 @@ class RuleSingleField(Rule):
 
         return result
 
+    def getDesc(self)->str:
+        desc = ""
+        for c in self.constraints:
+            desc += c.getDescString() + c.getContentString()
+
+        return desc
+
 class RuleIFTTT(Rule):
     def __init__(self, table:DbTable, field1:str = None, field2:str = None, args:dict = None) -> None:
         self.type = RuleType.RULE_TYPE_IFTTT
@@ -186,8 +196,21 @@ class RuleIFTTT(Rule):
 
         return result
 
+    def getField(self)->str:
+        return self.field1 + ", " + self.field2
+
     def getErrorStr(self, err: Constraint.ConstraintError, c1:Constraint.Constraint, c2:Constraint.Constraint):
         text = "字段{f1}，{f2}校验失败：当字段{f1}满足以下条件时：{t1}{ctx1}\n字段{f2}不满足以下条件：{t2}{ctx2}\n".format(f1=self.field1, f2=self.field2, t1=c1.getDescString(), ctx1=c1.getContentString(), t2=c2.getDescString(), ctx2=c2.getContentString())
+
+    def getDesc(self) -> str:
+        desc = ""
+        if len(self.constraints1) > 0 and len(self.constraints2) > 0:
+            c1 = self.constraints1[0]
+            c2 = self.constraints2[0]
+            text = "当字段{f1}满足以下条件时：{t1}{ctx1}\n字段{f2}需满足以下条件：{t2}{ctx2}\n".format(f1=self.field1, f2=self.field2, t1=c1.getDescString(), ctx1=c1.getContentString(), t2=c2.getDescString(), ctx2=c2.getContentString())
+        desc += text
+
+        return desc
 
 class RuleCalc(Rule):
     def __init__(self, table:DbTable, cursor:pymysql.cursors.Cursor, field1:str = None, field2:str = None, args:dict = None) -> None:
@@ -222,3 +245,10 @@ class RuleCalc(Rule):
             result.append(self.getErrorStr())
 
         return result
+
+    def getField(self)->str:
+        return self.field1 + ", " + self.field2
+
+    def getDesc(self) -> str:
+        expr1 = self.expr.format(f=self.field1)
+        return "字段({f1},{f2})需满足条件：{expr}=={f2}\n".format(f1 = self.field1, expr = expr1, f2 = self.field2)

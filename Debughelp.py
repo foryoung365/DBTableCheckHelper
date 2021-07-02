@@ -1,7 +1,7 @@
 import inspect
 import sys
 
-DEBUG = True
+DEBUG = False
 
 def retrieve_name_ex(var):
     stacks = inspect.stack()

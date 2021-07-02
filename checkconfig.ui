@@ -55,7 +55,7 @@
     </font>
    </property>
    <property name="text">
-    <string>未找到项目【{project}】的配置文件{file}，如已有配置，请导入配置文件，或者新建配置文件。</string>
+    <string>未找到项目【{project}】的配置文件【{file}】，如已有配置，请导入配置文件，或者新建配置文件。</string>
    </property>
    <property name="alignment">
     <set>Qt::AlignCenter</set>

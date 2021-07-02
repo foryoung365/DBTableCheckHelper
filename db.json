@@ -1,5 +1,6 @@
 {
     "databases": [
-        {"host":"172.24.140.83", "user":"wjq", "password":"wjq"}
+        {"host":"172.24.140.83", "user":"wjq", "password":"wjq"},
+        {"host":"192.168.19.38", "user":"root", "password":"aaa"}
     ]
 }

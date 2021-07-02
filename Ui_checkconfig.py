@@ -39,4 +39,4 @@ class Ui_Dialog(object):
         Dialog.setWindowTitle(_translate("Dialog", "配置"))
         self.importButton.setText(_translate("Dialog", "导入"))
         self.createButton.setText(_translate("Dialog", "新建"))
-        self.label.setText(_translate("Dialog", "未找到项目【{project}】的配置文件{file}，如已有配置，请导入配置文件，或者新建配置文件。"))
+        self.label.setText(_translate("Dialog", "未找到项目【{project}】的配置文件【{file}】，如已有配置，请导入配置文件，或者新建配置文件。"))
