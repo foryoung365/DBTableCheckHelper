@@ -1,17 +1,20 @@
 # -*- coding: utf-8 -*-
+from Constraint import ConstraintError, ConstraintTableReference, ConstraintValueRange
 from PyQt5 import QtCore
-from PyQt5.QtGui import QColor, QStandardItemModel, QStandardItem
+from PyQt5.QtGui import QColor, QIntValidator, QRegExpValidator, QStandardItemModel, QStandardItem
 import DbMgr
 import sys
 import Ui_main
 import Ui_project
 import Ui_checkconfig
+import Ui_rule
 import os
 import shutil
 import json
 import Rules
+import Ui_constraint
 
-from PyQt5.QtWidgets import QAction, QApplication, QDialog, QGridLayout, QLabel, QMainWindow, QMessageBox, QStatusBar, QFileDialog, QStyleFactory,  QTextEdit, QTreeView, QWidget
+from PyQt5.QtWidgets import QAction, QApplication, QDialog, QGridLayout, QLabel, QMainWindow, QMessageBox, QStatusBar, QFileDialog, QStyleFactory,  QTextEdit, QTreeView, QWidget, QInputDialog
 from ProjectSelector import ProjectSelector
 
 class TableCfgHelper:
@@ -40,6 +43,7 @@ class TableCfgHelper:
         #菜单栏
         self.mwui.menu.triggered[QAction].connect(self.onMenuBar)
         self.mwui.menu_2.triggered[QAction].connect(self.onMenuBar)
+        self.mwui.menu_3.triggered[QAction].connect(self.onMenuBar)
 
         #创建左侧部件
         self.mwui.lw = QWidget()
@@ -120,6 +124,7 @@ class TableCfgHelper:
                     
                         itemrule = [QStandardItem(emptyitem), f, desc]
                         itemtable.appendRow(itemrule)
+                        i += 1
                         
         else:
             itemrule = QStandardItem("未配置规则，请先创建规则。")
@@ -154,6 +159,8 @@ class TableCfgHelper:
             exit(0)
         elif q.text() == "选择项目":
             self.onReselectProject()
+        elif q.text() == "编辑规则":
+            self.showRuleDialog()
         else:
             pass
 
@@ -250,7 +257,7 @@ class TableCfgHelper:
     def onSelectProjectAccepted(self):
         self.ps.setSelectedProject(self.pw.comboBox.currentText())
         self.mwui.statuslabel.setText("当前项目："+self.ps.getSelectedProjectName())
-        self.d.hide()
+        self.d.close()
         self.checkProjectConfig()
 
     def onSelectProjectRejected(self):
@@ -301,7 +308,7 @@ class TableCfgHelper:
                     "当前项目还未配置规则，是否现在新增规则?", QMessageBox.Yes | 
                     QMessageBox.No, QMessageBox.No)
             if reply == QMessageBox.Yes:
-                pass
+                self.showRuleDialog()
             else:
                 pass
 
@@ -317,3 +324,427 @@ class TableCfgHelper:
     def onCreateButtonClicked(self):
         with open(self.ps.getConfigFileName(), "w+"):
             self.checkProjectConfig()
+
+    def onRuleTableDelButton(self):
+        list = self.rui.listView.model().stringList()
+        index = self.rui.listView.currentIndex()
+        if index.row() == -1:
+            QMessageBox.information(self.rd, "错误", "请先选择要删除的表！")
+            return
+
+        table = list[index.row()]
+        if table is not None:
+            for t in self.tableRules:
+                if t.table == table:
+                    self.tableRules.remove(t)
+                    break
+        self.showRuleTables()
+        self.showRuleTree()
+
+    def onRuleDelButton(self):
+        index = self.rui.treeView.currentIndex()
+        if index.row() == -1:
+            QMessageBox.information(self.rd, "错误", "请先选择要删除的规则！")
+            return
+        
+        table = self.getNewRuleCurrentTable()
+        del table.rules[index.row()]
+        self.showTableRule(table)
+        self.showRuleTree()
+
+    def showRuleDialog(self):
+        self.rd = QDialog()
+        self.rui = Ui_rule.Ui_Dialog()
+        self.rui.setupUi(self.rd)
+
+        self.resetNewRule()
+        
+        self.showRuleTables()
+        self.rui.listView.clicked.connect(self.onSelectRuleList)
+        self.rui.pushButton.clicked.connect(self.onRuleAddTableButton)
+
+        self.showNewRuleS()
+
+        self.rui.pushButton_2.clicked.connect(self.onNewRuleSingleAddButton)
+        self.rui.pushButton_3.clicked.connect(self.onNewRuleSingleDelButton)
+
+        self.showNewRuleI()
+
+        self.rui.pushButton_5.clicked.connect(self.onNewRuleIFTTTAdd1Button)
+        self.rui.pushButton_6.clicked.connect(self.onNewRuleIFTTTDel1Button)
+        self.rui.pushButton_7.clicked.connect(self.onNewRuleIFTTTAdd2Button)
+        self.rui.pushButton_8.clicked.connect(self.onNewRuleIFTTTDel2Button)
+
+        regexp = QtCore.QRegExp("[\w]+")
+        v = QRegExpValidator(regexp)
+        self.rui.lineEdit.setValidator(v)
+        self.rui.lineEdit_2.setValidator(v)
+        self.rui.lineEdit_3.setValidator(v)
+        self.rui.lineEdit_4.setValidator(v)
+        self.rui.lineEdit_5.setValidator(v)
+
+        regexp2 = QtCore.QRegExp("[\w+\-*/%{}]+")
+        v2 = QRegExpValidator(regexp2)
+        self.rui.lineEdit_6.setValidator(v2)
+
+        self.rui.pushButton_9.clicked.connect(self.onNewRuleAddButton)
+        self.rui.pushButton_4.clicked.connect(self.onNewRuleDoneButton)
+
+        self.rui.lineEdit_6.textChanged.connect(self.onNewRuleCalcExpChanged)
+
+
+        self.rui.pushButton_10.clicked.connect(self.onRuleTableDelButton)
+        self.rui.pushButton_11.clicked.connect(self.onRuleDelButton)
+
+        self.rd.setFixedSize(self.rd.width(), self.rd.height())
+        self.rd.setModal(True)
+        self.rd.show()
+
+    def onNewRuleAddButton(self):
+        valid = False
+        table = self.getNewRuleCurrentTable()
+        
+        if self.ruleS is not None and self.ruleS.isValid():
+            table.rules.append(self.ruleS)
+            valid = True
+
+        if self.ruleC is not None and self.ruleC.isValid():
+            table.rules.append(self.ruleC)
+            valid = True
+
+        if self.ruleI is not None and self.ruleI.isValid():
+            table.rules.append(self.ruleI)
+            valid = True
+
+        if not valid:
+            QMessageBox.information(self.rd, "错误", "新规则无效，请检查输入！")
+            return
+
+        self.resetNewRule()
+        self.onSelectRuleList(self.rui.listView.currentIndex())
+        self.showNewRule()
+        self.showRuleTree()
+
+    def onNewRuleDoneButton(self):
+        self.rd.close()
+        self.showRuleTree()
+
+    def showNewRule(self):
+        idx = self.rui.tabWidget.currentIndex()
+        if idx == 0:
+            self.showNewRuleS()
+        elif idx == 1:
+            self.showNewRuleI()
+        else:
+            self.showNewRuleC()
+
+    def showNewRuleC(self):
+        self.rui.lineEdit_4.setText("")
+        self.rui.lineEdit_5.setText("")
+        self.rui.lineEdit_6.setText("")
+
+    def showNewRuleS(self):
+        model = QtCore.QStringListModel()
+        list = []
+        if self.ruleS is not None and self.ruleS.isValid():
+            for c in self.ruleS.constraints:
+                list.append(c.getDescString() + c.getContentString())
+
+        model.setStringList(list)
+        self.rui.listView_2.setModel(model)
+
+    def showNewRuleI(self):
+        model = QtCore.QStringListModel()
+        list = []
+        if self.ruleI is not None:
+            for c1 in self.ruleI.constraints1:
+                list.append(c1.getDescString() + c1.getContentString())
+        model.setStringList(list)
+        self.rui.listView_3.setModel(model)
+
+        model = QtCore.QStringListModel()
+        list = []
+        if self.ruleI is not None:
+            for c2 in self.ruleI.constraints2:
+                list.append(c2.getDescString() + c2.getContentString())
+        model.setStringList(list)
+        self.rui.listView_4.setModel(model)
+
+    def onNewRuleIFTTTAdd1Button(self):
+        if not self.checkNewRuleIFTTTField():
+            return
+        self.iftttIdx = 1
+        self.showConstraintDialog(True)
+
+    def onNewRuleIFTTTDel1Button(self):
+        index = self.rui.listView_3.currentIndex()
+        if index.row() == -1:
+            QMessageBox.information(self.rd, "错误", "请先选择要删除的约束！")
+        else:
+            del self.ruleI.constraints1[index.row()]
+            self.showNewRuleI()
+
+    def onNewRuleIFTTTAdd2Button(self):
+        if not self.checkNewRuleIFTTTField():
+            return
+
+        self.iftttIdx = 2
+        self.showConstraintDialog(True)
+
+    def onNewRuleIFTTTDel2Button(self):
+        index = self.rui.listView_4.currentIndex()
+        if index.row() == -1:
+            QMessageBox.information(self.rd, "错误", "请先选择要删除的约束！")
+        else:
+            del self.ruleI.constraints2[index.row()]
+            self.showNewRuleI()
+
+    def onNewRuleCalcExpChanged(self):
+        exp = self.rui.lineEdit_6.text()
+        if len(exp) <= 0:
+            return
+
+        if not self.checkNewRuleCalcField():
+            self.rui.lineEdit_6.setText("")
+            return
+        else:
+            if exp.find("{f}") == -1:
+                return
+            exp = exp.format(f=self.rui.lineEdit_4.text())
+            txt = "{f2}={exp}".format(f2=self.rui.lineEdit_5.text(), exp=exp)
+
+            self.rui.textEdit.setText(txt)
+            self.ruleC.expr = exp
+
+    def checkNewRuleIFTTTField(self)->bool:
+        if (len(self.rui.lineEdit_2.text()) <= 0 or len(self.rui.lineEdit_3.text()) <= 0):
+            QMessageBox.information(self.rd, "错误", "请先输入字段1和字段2！")
+            return False
+        else:
+            if self.ruleI is None:
+                self.ruleI = Rules.RuleIFTTT(self.getNewRuleCurrentTable(), self.rui.lineEdit_2.text(), self.rui.lineEdit_3.text())
+            return True
+
+    def checkNewRuleCalcField(self)->bool:
+        if len(self.rui.lineEdit_4.text()) <= 0 or len(self.rui.lineEdit_5.text()) <= 0:
+            QMessageBox.information(self.rd, "错误", "请先输入字段1和字段2！")
+            return False
+        else:
+            if self.ruleC is None:
+                self.ruleC = Rules.RuleCalc(self.getNewRuleCurrentTable(), self.rui.lineEdit_4.text(), self.rui.lineEdit_5.text())
+            return True
+
+    def onNewRuleSingleAddButton(self):
+        if self.ruleS is None:
+            field = self.rui.lineEdit.text()
+            if len(field) <= 0:
+                QMessageBox.information(self.rd, "错误", "请先输入字段名！")
+                return
+            else:
+                self.ruleS = Rules.RuleSingleField(self.getNewRuleCurrentTable(), field)
+            
+        self.showConstraintDialog(True)
+
+    def getNewRuleCurrentTable(self)->Rules.DbTable:
+        index = self.rui.listView.currentIndex()
+        return self.tableRules[index.row()]
+
+    def addNewRuleConstraint(self):
+        idx = self.rui.tabWidget.currentIndex()
+        rule = None
+        if idx == 0:
+            self.addNewRuleCosntraintS()
+        elif idx == 1:
+            self.addNewRuleConstraintI()
+        else:
+           pass
+
+    def addNewRuleCosntraintS(self):
+        if self.rangeC.isValid():
+            self.ruleS.constraints.append(self.rangeC)
+        
+        if self.refC.isValid():
+            self.ruleS.constraints.append(self.refC)
+
+    def addNewRuleConstraintI(self):
+        if self.iftttIdx == 1:
+            if self.rangeC.isValid():
+                self.ruleI.constraints1.append(self.rangeC)
+        
+            if self.refC.isValid():
+                self.ruleI.constraints1.append(self.refC)
+        else:
+            if self.rangeC.isValid():
+                self.ruleI.constraints2.append(self.rangeC)
+        
+            if self.refC.isValid():
+                self.ruleI.constraints2.append(self.refC)
+
+
+    def onNewRuleSingleDelButton(self):
+        index = self.rui.listView_2.currentIndex()
+        if index.row() == -1:
+            QMessageBox.information(self.rd, "错误", "请先选择要删除的约束！")
+        else:
+            del self.ruleS.constraints[index.row()]
+            self.showNewRuleS()
+
+
+    def showRuleTables(self):
+        model = QtCore.QStringListModel()
+        tablelist = []
+
+        for r in self.tableRules:
+            if r is not None:
+                tablelist.append(r.table)
+
+        model.setStringList(tablelist)
+
+        self.rui.listView.setModel(model)
+
+        self.onSelectRuleList(self.rui.listView.currentIndex())
+
+    def onSelectRuleList(self, index):
+        list = self.rui.listView.model().stringList()
+        row = index.row()
+        if row == -1 or row >= len(list):
+            return
+
+        table = list[row]
+        if table is not None:
+            self.showTableRule(table)
+
+
+    def showTableRule(self, t:str):
+        model = QStandardItemModel()
+        model.setHorizontalHeaderLabels(["字段", "规则"])
+        for table in self.tableRules:
+            if table is not None and t == table.table:
+                if len(table.rules) > 0:
+                    i = 0
+                    for r in table.rules:
+                        coloridx = 1 + i % 2
+                        f = QStandardItem(r.getField())
+                        f.setEditable(False)
+                        f.setBackground(self.colors[coloridx])
+                        desc = QStandardItem(r.getDesc())
+                        desc.setEditable(False)
+                        desc.setBackground(self.colors[coloridx])
+                        model.appendRow([f, desc])
+                        i += 1
+        self.rui.treeView.setIndentation(0)
+        self.rui.treeView.setModel(model)
+        self.rui.treeView.expandAll()
+
+    def resetNewRule(self):
+        self.ruleS = None
+        self.ruleI = None
+        self.ruleC = None
+        self.rui.lineEdit.setText("")
+        self.rui.lineEdit_2.setText("")
+        self.rui.lineEdit_3.setText("")
+        self.rui.lineEdit_4.setText("")
+        self.rui.lineEdit_5.setText("")
+        self.rui.lineEdit_6.setText("")
+        self.rui.textEdit.setText("")
+                        
+    def onRuleAddTableButton(self):
+        name,succ = QInputDialog.getText(self.rd, "新数据表", "请输入数据表名：")
+        if not self.IsExistTable(name):
+            self.tableRules.append(Rules.DbTable(name))
+
+        idx = 0
+        for table in self.tableRules:
+            if name == table.table:
+                self.showRuleTables()
+                index = self.rui.listView.model().index(idx, 0)
+                self.rui.listView.setCurrentIndex(index)
+                self.onSelectRuleList(index)
+                return
+            idx += 1
+
+    def IsExistTable(self, table:str)->bool:
+        for t in self.tableRules:
+            if table == t.table:
+                return True
+        
+        return False
+
+    def showConstraintDialog(self, reset:bool = False):
+        if reset:
+            self.cd = QDialog()
+            self.cui = Ui_constraint.Ui_Form()
+            self.cui.setupUi(self.cd)
+
+            self.rangeC = ConstraintValueRange()
+            self.refC = ConstraintTableReference()
+
+        self.refreshConstraint()
+
+        self.cui.lineEdit_3.setValidator(QIntValidator())
+        self.cui.lineEdit_4.setValidator(QIntValidator())
+
+        self.cui.pushButton.clicked.connect(self.onRangeConstraintClearButton)
+        self.cui.pushButton_2.clicked.connect(self.onRangeConstraintAddButtion)
+        self.cui.pushButton_3.clicked.connect(self.onRefConstraintClearButton)
+        self.cui.pushButton_4.clicked.connect(self.onRefConstraintAddButton)
+
+        self.cui.buttonBox.accepted.connect(self.onConstraintButtonBoxAccepted)
+        self.cui.buttonBox.rejected.connect(self.onConstraintButtonBoxRejected)
+
+        self.cd.setModal(True)
+        self.cd.show()
+
+    def onConstraintButtonBoxAccepted(self):
+        self.cd.close()
+
+        self.addNewRuleConstraint()
+        self.showNewRule()
+
+    def onConstraintButtonBoxRejected(self):
+        self.rangeC = ConstraintValueRange()
+        self.refC = ConstraintTableReference()
+        self.cd.close()
+
+    def refreshConstraint(self):
+        if len(self.rangeC.ranges) > 0:
+            txt = self.rangeC.getDescString()
+            txt += self.rangeC.getContentString()
+            self.cui.textEdit.setText(txt)
+        else:
+            self.cui.textEdit.setText("")
+
+        if len(self.refC.refs) > 0:
+            txt = self.refC.getDescString()
+            txt += self.refC.getContentString()
+
+            self.cui.textEdit_2.setText(txt)
+        else:
+            self.cui.textEdit_2.setText("")
+
+    def onRangeConstraintClearButton(self):
+        self.rangeC = ConstraintValueRange()
+        self.refreshConstraint()
+
+    def onRangeConstraintAddButtion(self):
+        min = int(self.cui.lineEdit_3.text())
+        max = int(self.cui.lineEdit_4.text())
+        
+        succ = self.rangeC.addRange(min, max)
+        if succ != ConstraintError.CONSTRAINT_ERROR_OK:
+            QMessageBox.information(self.cd, "错误", self.rangeC.getErrorString(succ))
+        else:
+            self.refreshConstraint()
+
+    def onRefConstraintClearButton(self):
+        self.refC = ConstraintTableReference()
+        self.refreshConstraint()
+
+    def onRefConstraintAddButton(self):
+        t = self.cui.lineEdit_2.text()
+        f = self.cui.lineEdit.text()
+        succ = self.refC.addRef(t, f)
+        if succ != ConstraintError.CONSTRAINT_ERROR_OK:
+            QMessageBox.information(self.cd, "错误", self.refC.getErrorString(succ))
+        else:
+            self.refreshConstraint()

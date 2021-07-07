@@ -24,12 +24,15 @@ class Rule:
         return self.type
 
     def getField(self)->str:
-        return self.field
+        pass
 
     def run(self, row, cursor:pymysql.cursors.Cursor)->list:
         pass
 
     def getDesc(self)->str:
+        pass
+
+    def isValid(self)->bool:
         pass
 
 class TableCheckError(IntEnum):
@@ -66,6 +69,9 @@ class DbTable:
         
     def getFieldIndex(self, field:str)->int:
         return self.fields.index(field)
+
+    def isValid(self)->bool:
+        return len(self.rules) > 0
 
 
     def getErrorStr(self, err:TableCheckError):
@@ -160,6 +166,12 @@ class RuleSingleField(Rule):
 
         return desc
 
+    def getField(self)->str:
+        return self.field
+
+    def isValid(self) -> bool:
+        return len(self.constraints) > 0
+
 class RuleIFTTT(Rule):
     def __init__(self, table:DbTable, field1:str = None, field2:str = None, args:dict = None) -> None:
         self.type = RuleType.RULE_TYPE_IFTTT
@@ -197,7 +209,7 @@ class RuleIFTTT(Rule):
         return result
 
     def getField(self)->str:
-        return self.field1 + ", " + self.field2
+        return self.field1
 
     def getErrorStr(self, err: Constraint.ConstraintError, c1:Constraint.Constraint, c2:Constraint.Constraint):
         text = "字段{f1}，{f2}校验失败：当字段{f1}满足以下条件时：{t1}{ctx1}\n字段{f2}不满足以下条件：{t2}{ctx2}\n".format(f1=self.field1, f2=self.field2, t1=c1.getDescString(), ctx1=c1.getContentString(), t2=c2.getDescString(), ctx2=c2.getContentString())
@@ -212,13 +224,15 @@ class RuleIFTTT(Rule):
 
         return desc
 
+    def isValid(self) -> bool:
+        return len(self.constraints1) > 0 and len(self.constraints2) > 0
+
 class RuleCalc(Rule):
-    def __init__(self, table:DbTable, cursor:pymysql.cursors.Cursor, field1:str = None, field2:str = None, args:dict = None) -> None:
+    def __init__(self, table:DbTable, field1:str = None, field2:str = None, args:dict = None) -> None:
         self.type = RuleType.RULE_TYPE_CALCULATION
         self.table = table
         self.field1 = field1
         self.field2 = field2
-        self.cursor = cursor
         self.expr = ""
 
     def getErrorStr(self)->str:
@@ -247,8 +261,11 @@ class RuleCalc(Rule):
         return result
 
     def getField(self)->str:
-        return self.field1 + ", " + self.field2
+        return self.field1
 
     def getDesc(self) -> str:
         expr1 = self.expr.format(f=self.field1)
         return "字段({f1},{f2})需满足条件：{expr}=={f2}\n".format(f1 = self.field1, expr = expr1, f2 = self.field2)
+
+    def isValid(self) -> bool:
+        return len(self.expr) > 0

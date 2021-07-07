@@ -46,6 +46,9 @@ class Constraint:
     def toJson(self)->dict:
         pass
 
+    def isValid(self)->bool:
+        pass
+
 '''
 "constraints":[
     {"type": 1, "content": [{"min":minV, "max": maxV}, {"min":minV, "max": maxV}, ..., {"min":minV, "max": maxV}]},
@@ -108,6 +111,9 @@ class ConstraintValueRange(Constraint):
 
         return res
 
+    def isValid(self) -> bool:
+        return len(self.ranges) > 0
+
 class ConstraintTableReference(Constraint):
     def __init__(self, refs : dict = None) -> None:
         DEBUG_INFO(refs)
@@ -168,6 +174,9 @@ class ConstraintTableReference(Constraint):
         res = { "type":int(self.type), "content":self.refs }
 
         return res
+
+    def isValid(self) -> bool:
+        return len(self.refs) > 0
 
 
 def createNewConstrainst(jsonC:dict):
