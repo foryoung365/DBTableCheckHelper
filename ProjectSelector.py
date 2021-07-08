@@ -30,6 +30,8 @@ class ProjectSelector:
         for project in self.projects:
             if project["project"] == self.project_selected:
                 return project["name"]
+
+        return None
     
     def getSelectedProject(self):
         return self.project_selected

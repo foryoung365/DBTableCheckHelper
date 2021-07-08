@@ -13,6 +13,8 @@ import shutil
 import json
 import Rules
 import Ui_constraint
+import MyRuleDialog
+import Ui_database
 
 from PyQt5.QtWidgets import QAction, QApplication, QDialog, QGridLayout, QLabel, QMainWindow, QMessageBox, QStatusBar, QFileDialog, QStyleFactory,  QTextEdit, QTreeView, QWidget, QInputDialog
 from ProjectSelector import ProjectSelector
@@ -82,8 +84,9 @@ class TableCfgHelper:
         #状态栏
         self.mwui.statusbar = QStatusBar()
         self.mw.setStatusBar(self.mwui.statusbar)
-        self.mwui.statuslabel = QLabel("当前项目：未选择")
+        self.mwui.statuslabel = QLabel()
         self.mwui.statusbar.addWidget(self.mwui.statuslabel)
+        self.setStatusLabel()
 
         #显示主窗口
         self.mw.setWindowTitle("服务端配置检查工具")
@@ -139,6 +142,17 @@ class TableCfgHelper:
         treeview.setModel(model)
         treeview.expandAll()
 
+    def setStatusLabel(self):
+        pname = self.ps.getSelectedProjectName()
+        dbname = self.dbm.getSelectedDb()
+        if pname is None:
+            pname = "未选择"
+        if dbname is None:
+            dbname = "未选择"
+
+        txt = "当前项目：{p}\t当前数据库：{db}".format(p=pname, db=dbname)
+        self.mwui.statuslabel.setText(txt)
+
     def onRuleTreeItemDoubleClicked(self, index):
         cat = index.data(QtCore.Qt.UserRole)
         if cat == "fail":
@@ -149,6 +163,35 @@ class TableCfgHelper:
                 pass
             else:
                 pass
+
+    def showDatabaseDialog(self):
+        self.dbd = QDialog()
+        self.dbui = Ui_database.Ui_Dialog()
+        self.dbui.setupUi(self.dbd)
+        self.dbui.buttonBox.accepted.connect(self.onDatabaseAccepted)
+        self.dbui.buttonBox.rejected.connect(self.onDatabaseRejected)
+
+        regexp = QtCore.QRegExp("((25[0-5]|2[0-4]\d|((1\d{2})|([1-9]?\d)))\.){3}(25[0-5]|2[0-4]\d|((1\d{2})|([1-9]?\d)))")
+        v = QRegExpValidator(regexp)
+        self.dbui.lineEdit.setValidator(v)
+        self.dbd.setModal(True)
+
+        self.dbd.show()
+
+    def onDatabaseAccepted(self):
+        if len(self.dbui.lineEdit.text()) > 0 and len(self.dbui.lineEdit_2.text()) > 0 and len(self.dbui.lineEdit_3.text()) > 0:
+            cfg = {"host": self.dbui.lineEdit.text(), "user": self.dbui.lineEdit_2.text(), "password": self.dbui.lineEdit_3.text()}
+            self.dbm.cfgs.append(cfg)
+            self.dbm.saveFile()
+            self.ShowDbTree()
+            self.dbd.close()
+        else:
+            QMessageBox.information(self.dbd, "错误", "请填写连接IP、用户名和密码！")
+            self.showDatabaseDialog()
+            return
+
+    def onDatabaseRejected(self):
+        self.dbd.close()
 
     def onMenuBar(self, q):
         if q.text() == "执行检查":
@@ -161,6 +204,8 @@ class TableCfgHelper:
             self.onReselectProject()
         elif q.text() == "编辑规则":
             self.showRuleDialog()
+        elif q.text() == "新增数据库连接":
+            self.showDatabaseDialog()
         else:
             pass
 
@@ -237,11 +282,13 @@ class TableCfgHelper:
         if item is not None:
             if cat == "host":
                 self.dbm.setSelectedHost(item.text())
-                self.dbm.Connect()
+                dbc = self.dbm.Connect()
+                if dbc == None:
+                    QMessageBox.information(self.mw, "错误", "连接数据库【{db}】失败！".format(db = self.dbm.selectedHost))
                 self.ShowDbTree()
             else:
                 self.dbm.setSelectedDb(item.text())
-                self.mwui.statuslabel.setText("当前项目：" + self.ps.getSelectedProjectName() + "\t当前数据库：" + self.dbm.getSelectedDb())
+                self.setStatusLabel()
 
 
     def showSelectProjectDialog(self):
@@ -256,7 +303,7 @@ class TableCfgHelper:
 
     def onSelectProjectAccepted(self):
         self.ps.setSelectedProject(self.pw.comboBox.currentText())
-        self.mwui.statuslabel.setText("当前项目："+self.ps.getSelectedProjectName())
+        self.setStatusLabel()
         self.d.close()
         self.checkProjectConfig()
 
@@ -353,7 +400,7 @@ class TableCfgHelper:
         self.showRuleTree()
 
     def showRuleDialog(self):
-        self.rd = QDialog()
+        self.rd = MyRuleDialog.RuleDialog(self)
         self.rui = Ui_rule.Ui_Dialog()
         self.rui.setupUi(self.rd)
 
@@ -748,3 +795,19 @@ class TableCfgHelper:
             QMessageBox.information(self.cd, "错误", self.refC.getErrorString(succ))
         else:
             self.refreshConstraint()
+
+    def toJson(self)->dict:
+        tList = []
+        for t in self.tableRules:
+            if t.isValid():
+                tList.append(t.toJson())
+
+        res = {"tables": tList}
+
+        return res
+    
+    def saveCfg(self):
+        res = self.toJson()
+        with open(self.ps.getConfigFileName(), "w+") as cfg:
+            json.dump(res, cfg)
+ 

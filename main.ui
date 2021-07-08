@@ -31,6 +31,8 @@
     </property>
     <addaction name="action_2"/>
     <addaction name="separator"/>
+    <addaction name="action_5"/>
+    <addaction name="separator"/>
     <addaction name="action_6"/>
     <addaction name="separator"/>
     <addaction name="action_4"/>
@@ -75,6 +77,11 @@
   <action name="action_3">
    <property name="text">
     <string>编辑规则</string>
+   </property>
+  </action>
+  <action name="action_5">
+   <property name="text">
+    <string>新增数据库连接</string>
    </property>
   </action>
  </widget>

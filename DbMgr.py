@@ -38,8 +38,11 @@ class DbMgr:
 
     def addConfigFromJson(self, jsonDb:str)->DbError:
         DEBUG_INFO(jsonDb)
-        with open(jsonDb, 'r', encoding="utf-8") as cfg:
-            self.cfgs = json.load(cfg)["databases"]
+        try:
+            with open(jsonDb, 'r', encoding="utf-8") as cfg:
+                self.cfgs = json.load(cfg)["databases"]
+        except:
+            self.cfgs = []
         DEBUG_INFO(self.cfgs)
 
     def reset(self)->None:
@@ -86,7 +89,10 @@ class DbMgr:
         cfg = self.getSelectedConfig()
 
         DEBUG_INFO(cfg)
-        self.conn = pymysql.connect(cfg["host"], cfg["user"], cfg["password"])
+        try:
+            self.conn = pymysql.connect(cfg["host"], cfg["user"], cfg["password"])
+        except:
+            return None
 
         return self.conn
 
@@ -113,6 +119,17 @@ class DbMgr:
         
     def getSelectedDb(self)->str:
         return self.selectedDb
+
+    def toJson(self)->dict:
+        dblist = []
+        for c in self.cfgs:
+            dblist.append({"host": c["host"], "user": c["user"], "password": c["password"]})
+
+        return { "databases": dblist }
+
+    def saveFile(self):
+        with open(DB_CONFIG, "w+") as f:
+            json.dump(self.toJson(), f)
 
 if __name__ == '__main__':
     db = DbMgr()

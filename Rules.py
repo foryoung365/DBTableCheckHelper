@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
-
+from PyQt5.QtWidgets import QMessageBox
 from pymysql import constants
 from Debughelp import DEBUG_INFO
 from enum import IntEnum
 import json
 import Constraint
 import pymysql
+import traceback
 
 class RuleType(IntEnum):
     RULE_TYPE_NONE              = 0
@@ -35,6 +36,9 @@ class Rule:
     def isValid(self)->bool:
         pass
 
+    def toJson(self)->dict:
+        pass
+
 class TableCheckError(IntEnum):
     TABLE_CHECK_OK                  = 0
     TABLE_CHECK_NO_DATA_OR_ERROR    = 1
@@ -58,14 +62,16 @@ class DbTable:
             elif r["type"] == RuleType.RULE_TYPE_CALCULATION:
                 self.rules.append(RuleCalc(self, args=r))
 
-    def initFields(self, cursor:pymysql.cursors.Cursor):
+    def initFields(self, cursor:pymysql.cursors.Cursor)->bool:
         sql = "DESCRIBE {table}".format(table=self.table)
+
         cursor.execute(sql)
         self.fields = []
-
+    
         res = cursor.fetchall()
         for r in res:
             self.fields.append(r[0])
+
         
     def getFieldIndex(self, field:str)->int:
         return self.fields.index(field)
@@ -83,16 +89,23 @@ class DbTable:
             return "表【{table}】校验失败。\n".format(table=self.table)
 
     def checkTable(self, cursor:pymysql.cursors.Cursor)->str:
-        self.initFields(cursor)
-        sql = "SELECT * FROM {table}".format(table=self.table)
-        cursor.execute(sql)
-
         txt = "开始校验表【{t}】：\n".format(t=self.table)
+        
+        try:
+            self.initFields(cursor)
+            
+        
+            sql = "SELECT * FROM {table}".format(table=self.table)
+            cursor.execute(sql)
+        except:
+            txt += self.getErrorStr(TableCheckError.TABLE_CHECK_NO_DATA_OR_ERROR)
+            return txt
 
         res = cursor.fetchall()
         if res is None or len(res) <= 0:
             txt += self.getErrorStr(TableCheckError.TABLE_CHECK_NO_DATA_OR_ERROR)
             return txt
+           
 
         result = []
         for row in res:
@@ -108,6 +121,16 @@ class DbTable:
             txt += self.getErrorStr(TableCheckError.TABLE_CHECK_OK)
 
         return txt
+
+    def toJson(self)->dict:
+        rList = []
+        for r in self.rules:
+            if r.isValid():
+                rList.append(r.toJson())
+
+        res = {"table": self.table, "rules": rList}
+
+        return res
     
 '''
 "tables":[
@@ -172,6 +195,15 @@ class RuleSingleField(Rule):
     def isValid(self) -> bool:
         return len(self.constraints) > 0
 
+    def toJson(self) -> dict:
+        cList = []
+        for c in self.constraints:
+            if c.isValid():
+                cList.append(c.toJson()) 
+        res = { "type": int(self.type), "field": self.field, "constraints": cList }
+
+        return res
+
 class RuleIFTTT(Rule):
     def __init__(self, table:DbTable, field1:str = None, field2:str = None, args:dict = None) -> None:
         self.type = RuleType.RULE_TYPE_IFTTT
@@ -227,6 +259,21 @@ class RuleIFTTT(Rule):
     def isValid(self) -> bool:
         return len(self.constraints1) > 0 and len(self.constraints2) > 0
 
+    def toJson(self) -> dict:
+        c_list1 = []
+        c_list2 = []
+        for c1 in self.constraints1:
+            if c1.isValid():
+                c_list1.append(c1.toJson())
+
+        for c2 in self.constraints2:
+            if c2.isValid():
+                c_list2.append(c2.toJson())
+
+        res = {"type":int(self.type), "field1": self.field1, "constraints1": c_list1, "field2":self.field2, "constraints2": c_list2 }
+
+        return res
+
 class RuleCalc(Rule):
     def __init__(self, table:DbTable, field1:str = None, field2:str = None, args:dict = None) -> None:
         self.type = RuleType.RULE_TYPE_CALCULATION
@@ -269,3 +316,8 @@ class RuleCalc(Rule):
 
     def isValid(self) -> bool:
         return len(self.expr) > 0
+
+    def toJson(self) -> dict:
+        res = {"type":int(self.type), "field1": self.field1, "field2": self.field2, "expr": self.expr}
+
+        return res
