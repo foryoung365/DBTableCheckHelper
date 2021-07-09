@@ -2,10 +2,9 @@
 
 import sys
 
-from PyQt5.QtWidgets import QMessageBox
-from TblCfgHelper import TableCfgHelper
+import TblCfgHelper
 
 if __name__ == '__main__':
-    cfg = TableCfgHelper()
+    cfg = TblCfgHelper.TableCfgHelper()
 
     sys.exit(cfg.app.exec_())

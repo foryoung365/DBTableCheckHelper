@@ -333,6 +333,13 @@ class TableCfgHelper:
         fileName,fileExt = QFileDialog.getOpenFileName(self.mw, title, os.getcwd(), filetype)
         return fileName, fileExt
 
+    def getRuleCount(self):
+        count = 0
+        for t in self.tableRules:
+            count += len(t.rules)
+
+        return count
+
     def parseProjectConfig(self):
         try:
             with open(self.ps.getConfigFileName(), 'r', encoding="utf-8") as cfg:
@@ -344,7 +351,7 @@ class TableCfgHelper:
                         self.tableRules.append(Rules.DbTable(jsonR=r))
 
                     QMessageBox.information(self.mw, '提示',
-                    "成功加载{num}条规则。".format(num=len(self.tableRules)))
+                    "成功加载{num}条规则。".format(num=self.getRuleCount()))
                     self.showRuleTree()
                 except:
                     QMessageBox.information(self.mw, '提示',
@@ -386,7 +393,7 @@ class TableCfgHelper:
                     self.tableRules.remove(t)
                     break
         self.showRuleTables()
-        self.showRuleTree()
+        #self.showRuleTree()
 
     def onRuleDelButton(self):
         index = self.rui.treeView.currentIndex()
@@ -396,8 +403,8 @@ class TableCfgHelper:
         
         table = self.getNewRuleCurrentTable()
         del table.rules[index.row()]
-        self.showTableRule(table)
-        self.showRuleTree()
+        self.showTableRule(table.table)
+
 
     def showRuleDialog(self):
         self.rd = MyRuleDialog.RuleDialog(self)
@@ -470,11 +477,11 @@ class TableCfgHelper:
         self.resetNewRule()
         self.onSelectRuleList(self.rui.listView.currentIndex())
         self.showNewRule()
-        self.showRuleTree()
+        #self.showRuleTree()
 
     def onNewRuleDoneButton(self):
         self.rd.close()
-        self.showRuleTree()
+        #self.showRuleTree()
 
     def showNewRule(self):
         idx = self.rui.tabWidget.currentIndex()
@@ -561,7 +568,7 @@ class TableCfgHelper:
             txt = "{f2}={exp}".format(f2=self.rui.lineEdit_5.text(), exp=exp)
 
             self.rui.textEdit.setText(txt)
-            self.ruleC.expr = exp
+            self.ruleC.expr = self.rui.lineEdit_4.text()
 
     def checkNewRuleIFTTTField(self)->bool:
         if (len(self.rui.lineEdit_2.text()) <= 0 or len(self.rui.lineEdit_3.text()) <= 0):

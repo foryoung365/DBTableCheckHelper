@@ -113,7 +113,8 @@ class DbTable:
                 result += rule.run(row, cursor)
 
         for r in result:
-            txt += r + "\n"
+            if r is not None:
+                txt += r + "\n"
 
         if len(result) > 0:
             txt += self.getErrorStr(TableCheckError.TABLE_CHECK_FAILED)
@@ -169,7 +170,7 @@ class RuleSingleField(Rule):
 
     def getErrorStr(self, err:Constraint.ConstraintError)->str:
         c = Constraint()
-        return "字段({f})校验失败：{e})\n".format(f = self.field, e = c.getErrorString(err))
+        return "字段({f})校验失败：{e})".format(f = self.field, e = c.getErrorString(err))
 
     def run(self, row, cursor:pymysql.cursors.Cursor)->list:
         idx = self.table.getFieldIndex(self.field)
@@ -178,7 +179,8 @@ class RuleSingleField(Rule):
         for constraint in self.constraints:
             err = constraint.verify(row[idx], cursor)
             if err != Constraint.ConstraintError.CONSTRAINT_ERROR_OK:
-               result.append(self.getErrorStr(err))
+                txt = self.getErrorStr(err) + "原始数据：" + str(row)
+                result.append(txt)
 
         return result
 
@@ -213,6 +215,9 @@ class RuleIFTTT(Rule):
         self.constraints1 = []
         self.constraints2 = []
 
+        if args is not None:
+            self.initFromJson(args)
+
     def initFromJson(self, args:dict)->None:
         DEBUG_INFO(args)
         self.type = RuleType(args["type"])
@@ -236,7 +241,8 @@ class RuleIFTTT(Rule):
                for constraint2 in self.constraints2:
                    err2 = constraint2.verify(row[idx2], cursor)
                    if err2 != Constraint.ConstraintError.CONSTRAINT_ERROR_OK:
-                       result.append(self.getErrorStr(err2, constraint1, constraint2))
+                       txt = self.getErrorStr(err2, constraint1, constraint2) + "原始数据：" + str(row)
+                       result.append(txt)
 
         return result
 
@@ -245,6 +251,8 @@ class RuleIFTTT(Rule):
 
     def getErrorStr(self, err: Constraint.ConstraintError, c1:Constraint.Constraint, c2:Constraint.Constraint):
         text = "字段{f1}，{f2}校验失败：当字段{f1}满足以下条件时：{t1}{ctx1}\n字段{f2}不满足以下条件：{t2}{ctx2}\n".format(f1=self.field1, f2=self.field2, t1=c1.getDescString(), ctx1=c1.getContentString(), t2=c2.getDescString(), ctx2=c2.getContentString())
+
+        return text
 
     def getDesc(self) -> str:
         desc = ""
@@ -282,6 +290,9 @@ class RuleCalc(Rule):
         self.field2 = field2
         self.expr = ""
 
+        if args is not None:
+            self.initFromJson(args)
+
     def getErrorStr(self)->str:
         expr1 = self.expr.format(f=self.field1)
         return "字段({f1},{f2})校验失败：{expr}!={f2}\n".format(f1 = self.field1, expr = expr1, f2 = self.field2)
@@ -299,11 +310,12 @@ class RuleCalc(Rule):
         idx2 = self.table.getFieldIndex(self.field2)
 
         result = []
-        v1 = eval(self.expr.format(f=row[idx1]))
-        v2 = row[idx2]
+        v1 = int(eval(self.expr.format(f=row[idx1])))
+        v2 = int(row[idx2])
 
         if v1 != v2:
-            result.append(self.getErrorStr())
+            txt = self.getErrorStr() + "原始数据：" + str(row)
+            result.append(txt)
 
         return result
 
